@@ -1,47 +1,49 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { log } from './utils/common/logging.js';
+import { CALCULATOR_HANDLERS, CALCULATOR_TOOLS } from './tools/calculator.js';
+import { version } from './utils/version.js';
 
 
 export const createServer = async (): Promise<Server> => {
-    const ALL_TOOLS: never[] = [
+  const ALL_TOOLS = [
+    ...CALCULATOR_TOOLS
+  ];
 
-    ];
+  const ALL_HANDLERS = {
+    ...CALCULATOR_HANDLERS
+  };
 
-    const ALL_HANDLERS = {
+  const server = new Server({ name: 'mcp-tools-apps', version }, { capabilities: { tools: {} } });
 
-    };
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    log.info('Received list tools request');
+    return { tools: ALL_TOOLS };
+  });
 
-    const server = new Server({ name: 'mcp-tools-apps', __APP_VERSION__ }, { capabilities: { tools: {} } });
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const toolName = request.params.name;
+    log.info(`Received tool call: ${toolName}`);
 
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
-        log.info('Received list tools request');
-        return { tools: ALL_TOOLS };
-    });
+    try {
+      const handler = ALL_HANDLERS[toolName];
+      if (!handler) {
+        throw new Error(`Unknown tool: ${toolName}`);
+      }
+      return await handler(request);
+    } catch (error) {
+      log.error(`Error handling tool call: ${error}`);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
 
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        const toolName = request.params.name;
-        log.info('Received tool call:', toolName);
-
-        try {
-            const handler = ALL_HANDLERS[toolName];
-            if (!handler) {
-                throw new Error(`Unknown tool: ${toolName}`);
-            }
-            return await handler(request);
-        } catch (error) {
-            log.error(`Error handling tool call: ${error}`);
-            return {
-                content: [
-                    {
-                        type: 'text',
-                        text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-                    },
-                ],
-                isError: true,
-            };
-        }
-    });
-
-    return server;
+  return server;
 };
